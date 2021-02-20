@@ -17,6 +17,11 @@ namespace PerformanceServer
         readonly PerformanceCounter oMemoryCounter = new PerformanceCounter("Memory", "Available MBytes");
         public object oPerfocmanceLock;
 
+        private float nTotalMemory = 0;
+        private float nCPUUsage = 0;
+        private float nFreeMemory = 0;
+        private Timer oPerformanceCheckTimer;
+
         public PerformanceMonitor()
         {
             oPerfocmanceLock = new object();
@@ -27,7 +32,7 @@ namespace PerformanceServer
             oPerfocmanceLock = lockObject;
         }
 
-        public void Run(int port = 8080)
+        public void Run(int port = 8081)
         {
             oWsServer = new WebSocketServer();
             if (!oWsServer.Setup(port))
@@ -47,38 +52,34 @@ namespace PerformanceServer
                 Console.WriteLine("Websocket Server started on :" + nWsPort);
             }
 
-            //var performanceCounterCategories = PerformanceCounterCategory.GetCategories()
-            //    .FirstOrDefault(category => category.CategoryName == "Processor");
-            //var performanceCounters = performanceCounterCategories.GetCounters("_Total");
-            //Console.WriteLine("Displaying performance counters for Memory category:--\n");
-            //foreach (PerformanceCounter performanceCounter in performanceCounters)
-            //{
-            //    Console.WriteLine(performanceCounter.CounterName);
-            //}
+            oPerformanceCheckTimer = new Timer(1000);
+            oPerformanceCheckTimer.Elapsed += UpdatePerformanceDetails;
+            oPerformanceCheckTimer.AutoReset = true;
+            oPerformanceCheckTimer.Start();
+
+        }
+
+        private void UpdatePerformanceDetails(object sender, ElapsedEventArgs e)
+        {
+            lock (oPerfocmanceLock)
+            {
+                nTotalMemory = GetTotalMemoryInMBytes();
+                nCPUUsage = oCpuCounter.NextValue();
+                nFreeMemory = oMemoryCounter.NextValue();
+            }
         }
 
         private void SendPerformanceDetails(object sender, ElapsedEventArgs e, WebSocketSession session)
         {
             if (session.Connected)
             {
-                float nTotalMemory = GetTotalMemoryInMBytes();
-                float nCpuUsagePercent = 0;
-                float nMemFreeMB = 0;
-                float nMemUseMB = 0; ;
-
-                lock (oPerfocmanceLock)
-                {
-                    nCpuUsagePercent = oCpuCounter.NextValue();
-                    nMemFreeMB = oMemoryCounter.NextValue();
-                    nMemUseMB = nTotalMemory-nMemFreeMB;
-                }
 
                 string data = JsonConvert.SerializeObject(new PerformanceDetails
                 {
                     Date = DateTime.Now,
-                    CPU = nCpuUsagePercent,
-                    MemFree = nMemFreeMB,
-                    MemUsed = nMemUseMB,
+                    CPU = nCPUUsage,
+                    MemFree = nFreeMemory,
+                    MemUsed = nTotalMemory - nFreeMemory
                 });
                 session.Send(data);
             }
@@ -107,6 +108,7 @@ namespace PerformanceServer
                 item.Value.Stop();
             }
             oWsServer.Stop();
+            oPerformanceCheckTimer.Stop();
             Console.WriteLine("Websocket Server stopped on :" + nWsPort);
         }
 
@@ -126,7 +128,7 @@ namespace PerformanceServer
 
         static ulong GetTotalMemoryInMBytes()
         {
-            return new Microsoft.VisualBasic.Devices.ComputerInfo().TotalPhysicalMemory / (1024 * 1024);
+            return new ComputerInfo().TotalPhysicalMemory / (1024 * 1024);
         }
     }
 }
