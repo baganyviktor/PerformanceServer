@@ -5,6 +5,7 @@ using System.Timers;
 using SuperSocket.WebSocket;
 using Newtonsoft.Json;
 using Microsoft.VisualBasic.Devices;
+using System.Configuration;
 
 namespace PerformanceServer
 {
@@ -32,7 +33,7 @@ namespace PerformanceServer
             oPerfocmanceLock = lockObject;
         }
 
-        public void Run(int port = 8081)
+        public void Run(int port = 8080)
         {
             oWsServer = new WebSocketServer();
             if (!oWsServer.Setup(port))
